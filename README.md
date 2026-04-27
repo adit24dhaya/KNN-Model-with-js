@@ -68,9 +68,11 @@ No server setup is required.
 - **Controls:**  
   - Toggle chart axes  
   - Theme switch (dots or emoji 🧙⚔️🛡️)  
+  - Decision boundary overlay toggle + density control
   - Adjust number of points (`5–500`)  
   - Adjust number of neighbors *K* (`1–50`)  
   - Choose number of classes (`2–5`)  
+  - Live confidence badge for cursor prediction
   - Buttons: *Regenerate*, *Shuffle Classes*  
   - Keyboard shortcuts: `[ / ]` to change K  
 - **Interaction:** Add or shuffle points to see how KNN boundaries shift.

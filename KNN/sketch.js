@@ -12,6 +12,8 @@ let K = 3;
 let NUM_CLASSES = 2;
 let THEME = "dots";        // "dots" | "emoji"
 let CHART_MODE = false;    // toggle via checkbox
+let SHOW_BOUNDARY = false;
+let BOUNDARY_DENSITY = 24; // grid cell size for decision surface
 
 // Colors & Emojis
 const CLASS_COLORS = [
@@ -167,6 +169,10 @@ function draw() {
       drawGrid();
     }
 
+    if (SHOW_BOUNDARY && points.length > 0) {
+      drawDecisionBoundary();
+    }
+
     for (const p of points) p.display();
 
     // classify and draw cursor if inside canvas/plot
@@ -177,6 +183,7 @@ function draw() {
       const qy = CHART_MODE ? pxToDataY(mouseY) : map(mouseY, 0, height, 0, 100);
 
       const { prediction, neighborIndices } = classify(qx, qy, K);
+      updatePredictionHUD(prediction, neighborIndices);
 
       // highlight neighbors
       for (const idx of neighborIndices) if (points[idx]) points[idx].isNeighbor = true;
@@ -198,6 +205,9 @@ function draw() {
         const r = 10 + 2 * Math.sin(t); ellipse(cx, cy, r, r);
         noFill(); stroke(0,0,0,40); ellipse(cx, cy, r + 10, r + 10);
       }
+    }
+    if (!canClassify) {
+      updatePredictionHUD(null, []);
     }
   } catch (e) { console.error(e); showError('Draw error: ' + e.message); }
 }
@@ -226,6 +236,54 @@ function classify(qx, qy, k) {
   return { prediction: bestClass, neighborIndices };
 }
 
+function classColor(cls, alpha = 255) {
+  const c = CLASS_COLORS[cls % CLASS_COLORS.length] || [120, 120, 120];
+  return color(c[0], c[1], c[2], alpha);
+}
+
+function drawDecisionBoundary() {
+  const xMin = CHART_MODE ? plotLeft() : 0;
+  const xMax = CHART_MODE ? plotRight() : width;
+  const yMin = CHART_MODE ? plotTop() : 0;
+  const yMax = CHART_MODE ? plotBottom() : height;
+  const step = Math.max(8, BOUNDARY_DENSITY);
+
+  noStroke();
+  for (let x = xMin; x < xMax; x += step) {
+    for (let y = yMin; y < yMax; y += step) {
+      const cx = x + step * 0.5;
+      const cy = y + step * 0.5;
+      const qx = CHART_MODE ? pxToDataX(cx) : map(cx, 0, width, 0, 100);
+      const qy = CHART_MODE ? pxToDataY(cy) : map(cy, 0, height, 0, 100);
+      const { prediction } = classify(qx, qy, K);
+      fill(classColor(prediction, 42));
+      rect(x, y, step + 1, step + 1);
+    }
+  }
+}
+
+function updatePredictionHUD(prediction, neighborIndices) {
+  const confEl = document.getElementById('confidence');
+  const predEl = document.getElementById('predClass');
+  if (!confEl || !predEl) return;
+
+  if (prediction == null || !neighborIndices.length) {
+    confEl.textContent = '-';
+    predEl.textContent = 'Class -';
+    return;
+  }
+
+  const votes = Array(Math.max(1, NUM_CLASSES)).fill(0);
+  for (const idx of neighborIndices) {
+    const p = points[idx];
+    if (p) votes[p.classId] = (votes[p.classId] || 0) + 1;
+  }
+  const bestVote = votes[prediction] || 0;
+  const confidence = Math.round((bestVote / Math.max(1, neighborIndices.length)) * 100);
+  confEl.textContent = `${confidence}%`;
+  predEl.textContent = `Class ${prediction + 1}`;
+}
+
 // ---------- Background grid (non-chart mode) ----------
 function drawGrid(step = GRID_STEP) {
   if (!SHOW_GRID || CHART_MODE) return;
@@ -248,10 +306,13 @@ function wireUI() {
   const classesSlider = document.getElementById("classes");
   const themeSel      = document.getElementById("theme");
   const chartChk      = document.getElementById("chart");
+  const boundaryChk   = document.getElementById("boundary");
+  const densitySlider = document.getElementById("density");
 
   const pointsVal  = document.getElementById("pointsVal");
   const kVal       = document.getElementById("kVal");
   const classesVal = document.getElementById("classesVal");
+  const densityVal = document.getElementById("densityVal");
 
   const regenBtn   = document.getElementById("regen");
   const shuffleBtn = document.getElementById("shuffle");
@@ -261,12 +322,15 @@ function wireUI() {
   NUM_CLASSES  = +classesSlider.value;
   THEME        = themeSel.value;
   CHART_MODE   = !!chartChk?.checked;
+  SHOW_BOUNDARY = !!boundaryChk?.checked;
+  BOUNDARY_DENSITY = +(densitySlider?.value || 24);
 
   kSlider.max = Math.max(1, NUM_POINTS);
 
   pointsVal.textContent  = NUM_POINTS;
   kVal.textContent       = K;
   classesVal.textContent = NUM_CLASSES;
+  if (densityVal) densityVal.textContent = String(BOUNDARY_DENSITY);
 
   pointsSlider.oninput = (e) => {
     NUM_POINTS = +e.target.value;
@@ -286,6 +350,13 @@ function wireUI() {
   };
   themeSel.onchange = (e) => { THEME = e.target.value; };
   if (chartChk) chartChk.onchange = (e) => { CHART_MODE = e.target.checked; };
+  if (boundaryChk) boundaryChk.onchange = (e) => { SHOW_BOUNDARY = e.target.checked; };
+  if (densitySlider) {
+    densitySlider.oninput = (e) => {
+      BOUNDARY_DENSITY = +e.target.value;
+      if (densityVal) densityVal.textContent = String(BOUNDARY_DENSITY);
+    };
+  }
 
   regenBtn.onclick = regeneratePoints;
   shuffleBtn.onclick = shuffleClasses;
